@@ -3,8 +3,8 @@
     <div class="group">
       <label for="inputTextArea">Input:</label>
       <textarea
-        v-model="input"
-        name="input"
+        v-model="inputConfig"
+        name="inputConfig"
         id="inputTextArea"
         :class="{
           valid: state === 'valid',
@@ -41,21 +41,21 @@
 </template>
 
 <script setup>
-import { colord, extend } from 'colord';
+import { colord, extend, getFormat } from 'colord';
 import cmykPlugin from 'colord/plugins/cmyk';
 import hwbPlugin from 'colord/plugins/hwb';
 import lchPlugin from 'colord/plugins/lch';
 
 extend([cmykPlugin, hwbPlugin, lchPlugin]);
 
-const input = ref('');
+const inputConfig = ref('');
 const outputCSS = ref('');
 const outputConfig = ref('');
 const conversion = ref('toHex');
 const state = computed(() => {
-  if (!input.value.length) return 'clean';
+  if (!inputConfig.value.length) return 'clean';
   try {
-    JSON.parse(input.value);
+    JSON.parse(inputConfig.value);
     return 'valid';
   } catch {
     return 'invalid';
@@ -68,18 +68,18 @@ const convertToCss = (input) => `:root {
     .join('\n  ')}
 }`;
 
+const getVariableKey = (str, prefix) => {
+  if (prefix) {
+    return `var(--${[prefix, str].join('-')})`;
+  } else {
+    return `var(--${str})`;
+  }
+};
+
 const convertConfig = (input, prefix) =>
   Object.entries(input).reduce((acc, [groupKey, groupValue]) => {
-    const getValue = (str, prefix) => {
-      if (prefix) {
-        return `var(--${[prefix, str].join('-')})`;
-      } else {
-        return `var(--${str})`;
-      }
-    };
-
     if (typeof groupValue === 'string') {
-      return { ...acc, [groupKey]: getValue(groupKey, prefix) };
+      return { ...acc, [groupKey]: getVariableKey(groupKey, prefix) };
     }
 
     return {
@@ -90,7 +90,9 @@ const convertConfig = (input, prefix) =>
 
 const convert = (input) =>
   Object.entries(input).reduce((acc, [key, value]) => {
-    const converted = colord(value)[conversion.value]();
+    const converted = getFormat(value)
+      ? colord(value)[conversion.value]()
+      : value;
     return { ...acc, [key]: converted };
   }, {});
 
@@ -106,10 +108,10 @@ const normalize = (input, prefix) =>
     return { ...acc, ...normalize(groupValue, groupKey) };
   }, {});
 
-watch(input, (value) => {
-  if (!value.length) return;
+const run = (input) => {
+  if (!input.length) return;
   try {
-    const inputAsObj = JSON.parse(value);
+    const inputAsObj = JSON.parse(input);
     const normalized = normalize(inputAsObj);
     const converted = convert(normalized);
     const css = convertToCss(converted);
@@ -125,6 +127,14 @@ watch(input, (value) => {
     console.error(e);
     return 'Invalid JSON';
   }
+};
+
+watch(inputConfig, (value) => {
+  run(value);
+});
+
+watch(conversion, (value) => {
+  run(inputConfig.value);
 });
 
 // watch();
