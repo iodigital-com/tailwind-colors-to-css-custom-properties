@@ -13,8 +13,8 @@
       ></textarea>
     </div>
     <div class="group">
-      <label for="inputTextArea">Output color format:</label>
-      <select v-model="conversion" name="conversion" id="">
+      <label for="selectOutputFormat">Output color format:</label>
+      <select v-model="conversion" name="conversion" id="selectOutputFormat">
         <option value="toHex">Hex</option>
         <option value="toRgbString">Rgb</option>
         <option value="toHslString">Hsl</option>
@@ -22,9 +22,16 @@
         <option value="toHwbString">Hwb</option>
         <option value="toLchString">Lch</option>
       </select>
-      <label for="outputTextArea">Output:</label>
+      <label for="outputTextArea">Output CSS:</label>
       <textarea
-        v-model="output"
+        v-model="outputCSS"
+        name="outputCSS"
+        id="outputTextArea"
+        readonly
+      ></textarea>
+      <label for="outputTextArea">Output config:</label>
+      <textarea
+        v-model="outputConfig"
         name="output"
         id="outputTextArea"
         readonly
@@ -42,6 +49,8 @@ import lchPlugin from 'colord/plugins/lch';
 extend([cmykPlugin, hwbPlugin, lchPlugin]);
 
 const input = ref('');
+const outputCSS = ref('');
+const outputConfig = ref('');
 const conversion = ref('toHex');
 const state = computed(() => {
   if (!input.value.length) return 'clean';
@@ -53,13 +62,31 @@ const state = computed(() => {
   }
 });
 
-const convertToCss = (input) => `
-:root {
+const convertToCss = (input) => `:root {
   ${Object.entries(input)
     .map(([key, value]) => `--${key}: ${value};`)
     .join('\n  ')}
-}
-`;
+}`;
+
+const convertConfig = (input, prefix) =>
+  Object.entries(input).reduce((acc, [groupKey, groupValue]) => {
+    const getValue = (str, prefix) => {
+      if (prefix) {
+        return `var(--${[prefix, str].join('-')})`;
+      } else {
+        return `var(--${str})`;
+      }
+    };
+
+    if (typeof groupValue === 'string') {
+      return { ...acc, [groupKey]: getValue(groupKey, prefix) };
+    }
+
+    return {
+      ...acc,
+      [groupKey]: convertConfig(groupValue, groupKey),
+    };
+  }, {});
 
 const convert = (input) =>
   Object.entries(input).reduce((acc, [key, value]) => {
@@ -79,13 +106,20 @@ const normalize = (input, prefix) =>
     return { ...acc, ...normalize(groupValue, groupKey) };
   }, {});
 
-const output = computed(() => {
-  if (!input.value.length) return '';
+watch(input, (value) => {
+  if (!value.length) return;
   try {
-    const inputAsObj = JSON.parse(input.value);
+    const inputAsObj = JSON.parse(value);
     const normalized = normalize(inputAsObj);
     const converted = convert(normalized);
     const css = convertToCss(converted);
+    const config = JSON.stringify(convertConfig(inputAsObj), null, 2);
+
+    console.log({ css, config });
+
+    outputCSS.value = css;
+    outputConfig.value = config;
+
     return css;
   } catch (e) {
     console.error(e);
